@@ -19,6 +19,9 @@ Or manually — drop the directory at `$HERMES_HOME/plugins/model-providers/devi
 (any name works for the installed-plugins path; `plugin.yaml` declares
 `kind: model-provider`).
 
+`hermes plugins enable` is **not** needed — model-provider plugins register on
+discovery, independent of the general-plugin enable list.
+
 ## Sign in
 
 Three ways to get a `devin-session-token$…` credential, in resolution order:
