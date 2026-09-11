@@ -1,0 +1,5 @@
+name: devin
+kind: model-provider
+version: 1.0.0
+description: Devin/Windsurf Cascade — direct Connect-RPC client, no external gateway
+author: V
