@@ -3,9 +3,12 @@ directly, no external gateway. Protocol ported from devin-gateway
 (https://github.com/CaiJingLong/devin-gateway).
 
 Credentials resolve in order:
-  1. DEVIN_API_KEY env var (~/.hermes/.env)
-  2. Devin CLI login — ~/.local/share/devin/credentials.toml (windsurf_api_key)
-  3. devin-gateway login — ~/.devin-gateway/token
+  1. DEVIN_API_KEY env var ($HERMES_HOME/.env is loaded into the environment)
+  2. Devin CLI login — .local/share/devin/credentials.toml (windsurf_api_key)
+  3. devin-gateway login — .devin-gateway/token
+File lookups probe every home Hermes uses: the process home, $HERMES_HOME,
+and the profile home $HERMES_HOME/home — so a login run inside an agent shell
+session still resolves for the gateway.
 DEVIN_BASE_URL overrides the API endpoint (default https://server.codeium.com;
 also auto-read from the Devin CLI credential store's api_server_url).
 """

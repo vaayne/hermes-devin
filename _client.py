@@ -29,9 +29,33 @@ from ._proto import (
 logger = logging.getLogger(__name__)
 
 # ─── Credential resolution ───────────────────────────────────────────────────
+#
+# Hermes splits $HOME: the gateway process gets $HERMES_HOME while agent shell
+# sessions get the profile home ($HERMES_HOME/home). A credential written by a
+# login run in one context must still resolve in the other, so file lookups are
+# tried against every home Hermes uses rather than relying on expanduser("~").
 
-_DEVIN_CLI_CREDENTIALS = os.path.expanduser("~/.local/share/devin/credentials.toml")
-_GATEWAY_TOKEN_FILE = os.path.expanduser("~/.devin-gateway/token")
+def _hermes_home() -> str:
+    """$HERMES_HOME when set (always inside Hermes), else the stock ~/.hermes."""
+    return os.environ.get("HERMES_HOME") or os.path.expanduser("~/.hermes")
+
+
+def _home_candidates() -> list[str]:
+    homes = [os.path.expanduser("~"), _hermes_home(), os.path.join(_hermes_home(), "home")]
+    seen, out = set(), []
+    for home in homes:
+        if home not in seen:
+            seen.add(home)
+            out.append(home)
+    return out
+
+
+def _find_in_homes(rel_path: str) -> str | None:
+    for home in _home_candidates():
+        path = os.path.join(home, rel_path)
+        if os.path.exists(path):
+            return path
+    return None
 
 
 def resolve_credentials() -> tuple[str, str | None]:
@@ -41,24 +65,28 @@ def resolve_credentials() -> tuple[str, str | None]:
     base_url = os.environ.get("DEVIN_BASE_URL", "").strip() or None
     if token and base_url:
         return token, base_url
-    try:
-        import tomllib
-
-        with open(_DEVIN_CLI_CREDENTIALS, "rb") as fh:
-            data = tomllib.load(fh)
-        if not token:
-            token = str(data.get("windsurf_api_key") or "").strip()
-        if not base_url:
-            saved = str(data.get("api_server_url") or "").strip()
-            base_url = saved or None
-    except Exception:
-        pass
-    if not token:
+    cli_credentials = _find_in_homes(".local/share/devin/credentials.toml")
+    if cli_credentials:
         try:
-            with open(_GATEWAY_TOKEN_FILE, encoding="utf-8") as fh:
-                token = fh.read().strip()
-        except OSError:
+            import tomllib
+
+            with open(cli_credentials, "rb") as fh:
+                data = tomllib.load(fh)
+            if not token:
+                token = str(data.get("windsurf_api_key") or "").strip()
+            if not base_url:
+                saved = str(data.get("api_server_url") or "").strip()
+                base_url = saved or None
+        except Exception:
             pass
+    if not token:
+        token_file = _find_in_homes(".devin-gateway/token")
+        if token_file:
+            try:
+                with open(token_file, encoding="utf-8") as fh:
+                    token = fh.read().strip()
+            except OSError:
+                pass
     return token, base_url
 
 

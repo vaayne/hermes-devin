@@ -6,7 +6,7 @@ Port of devin-gateway's src/login.ts + src/cli/login.ts. Runs the PKCE flow:
   1. Open https://app.devin.ai/auth/cli/continue?... (browser sign-in)
   2. Devin redirects to a local callback server with `code` + `state`
   3. Exchange code + verifier for a session token at api.devin.ai/auth/cli/token
-  4. Write DEVIN_API_KEY=<token> to ~/.hermes/.env
+  4. Write DEVIN_API_KEY=<token> to $HERMES_HOME/.env (or ~/.hermes/.env)
 
 Usage:
   python3 login.py            # interactive — opens browser, local callback
@@ -38,9 +38,35 @@ CALLBACK_PORT = 59653
 CALLBACK_PATH = "/callback"
 TIMEOUT_S = 300
 
-HERMES_ENV = os.path.expanduser("~/.hermes/.env")
+# Hermes splits $HOME: the gateway gets $HERMES_HOME while agent shell sessions
+# get the profile home ($HERMES_HOME/home). Anchor plugin-owned files at
+# $HERMES_HOME so a login run in a shell session still lands where the gateway
+# reads it, and probe every home when looking up files written elsewhere.
+HERMES_HOME = os.environ.get("HERMES_HOME") or os.path.expanduser("~/.hermes")
+HERMES_ENV = os.path.join(HERMES_HOME, ".env")
+# Written next to the login run's own home for interop with the TS gateway.
 GATEWAY_TOKEN_FILE = os.path.expanduser("~/.devin-gateway/token")
-DEVIN_CLI_CREDENTIALS = os.path.expanduser("~/.local/share/devin/credentials.toml")
+
+_CLI_CREDENTIALS_REL = ".local/share/devin/credentials.toml"
+_GATEWAY_TOKEN_REL = ".devin-gateway/token"
+
+
+def _home_candidates() -> list[str]:
+    homes = [os.path.expanduser("~"), HERMES_HOME, os.path.join(HERMES_HOME, "home")]
+    seen, out = set(), []
+    for home in homes:
+        if home not in seen:
+            seen.add(home)
+            out.append(home)
+    return out
+
+
+def _find_in_homes(rel_path: str) -> str | None:
+    for home in _home_candidates():
+        path = os.path.join(home, rel_path)
+        if os.path.exists(path):
+            return path
+    return None
 
 
 def _b64url(data: bytes) -> str:
@@ -121,8 +147,9 @@ def upsert_env_var(path: str, key: str, value: str) -> None:
 
 
 def save_token(token: str) -> str:
-    """Write DEVIN_API_KEY to ~/.hermes/.env (canonical Hermes secrets file) and
-    ~/.devin-gateway/token for interop with the TS gateway. Returns a description."""
+    """Write DEVIN_API_KEY to $HERMES_HOME/.env (canonical Hermes secrets file)
+    and ~/.devin-gateway/token for interop with the TS gateway. Returns a
+    description."""
     upsert_env_var(HERMES_ENV, "DEVIN_API_KEY", token)
     try:
         os.makedirs(os.path.dirname(GATEWAY_TOKEN_FILE), exist_ok=True)
@@ -137,10 +164,12 @@ def save_token(token: str) -> str:
 def current_status() -> str:
     if os.environ.get("DEVIN_API_KEY"):
         return "DEVIN_API_KEY is set in the environment."
-    if os.path.exists(DEVIN_CLI_CREDENTIALS):
-        return f"Devin CLI credentials found: {DEVIN_CLI_CREDENTIALS}"
-    if os.path.exists(GATEWAY_TOKEN_FILE):
-        return f"Token file found: {GATEWAY_TOKEN_FILE}"
+    cli_credentials = _find_in_homes(_CLI_CREDENTIALS_REL)
+    if cli_credentials:
+        return f"Devin CLI credentials found: {cli_credentials}"
+    token_file = _find_in_homes(_GATEWAY_TOKEN_REL)
+    if token_file:
+        return f"Token file found: {token_file}"
     try:
         with open(HERMES_ENV, encoding="utf-8") as fh:
             for line in fh:

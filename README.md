@@ -34,13 +34,20 @@ Three ways to get a `devin-session-token$…` credential, in resolution order:
    ```
 
    Opens a browser for Devin sign-in, exchanges the callback for a token, and
-   writes `DEVIN_API_KEY=…` to `~/.hermes/.env`.
+   writes `DEVIN_API_KEY=…` to `$HERMES_HOME/.env` (`~/.hermes/.env` on a stock
+   install).
 
 2. **Devin CLI** — if you've run `devin auth login`, you're done: the plugin reads
    `~/.local/share/devin/credentials.toml` (`windsurf_api_key`) automatically.
 
-3. **Manual** — put `DEVIN_API_KEY=<token>` in `~/.hermes/.env` yourself.
+3. **Manual** — put `DEVIN_API_KEY=<token>` in `$HERMES_HOME/.env` yourself.
    `~/.devin-gateway/token` is also picked up.
+
+Credential files are probed under every home Hermes uses — the process home,
+`$HERMES_HOME`, and the profile home `$HERMES_HOME/home` — so a login run inside
+an agent shell session (whose `HOME` is the profile home, e.g. a container
+deployment) still resolves for the gateway. `login.py` always writes to
+`$HERMES_HOME/.env` regardless of which `HOME` it runs under.
 
 `DEVIN_BASE_URL` overrides the API endpoint (default `https://server.codeium.com`).
 
